@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mafia Game</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #1a237e;
+            font-family: Arial, sans-serif;
+        }
+
+        #game-view {
+            display: none;
+            width: 80%; /* Default for large screens */
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .container {
+            background-color: #283593;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 80%; /* Default for large screens */
+            margin: 0 auto;
+        }
+
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        /* Media query for medium screens */
+        @media screen and (max-width: 1024px) {
+            #game-view,
+            .container {
+                width: 90%;
+            }
+
+            .title {
+                font-size: 1.8rem;
+            }
+
+            .notification-area,
+            .mafia-chat {
+                width: 90%;
+            }
+        }
+
+        /* Media query for mobile screens */
+        @media screen and (max-width: 768px) {
+            #game-view,
+            .container {
+                width: 100%;
+                padding: 1rem;
+            }
+
+            .title {
+                font-size: 1.5rem;
+                flex-direction: column;
+                gap: 15px;
+                padding: 10px 0;
+            }
+
+            #vote-button,
+            #complete-button {
+                position: static;
+                transform: none;
+                margin: 5px 0;
+            }
+
+            .notification-area,
+            .mafia-chat {
+                width: 100%;
+            }
+
+            input {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .player-card {
+                padding: 15px;
+            }
+
+            .player-card button {
+                font-size: 1.2rem;
+                padding: 8px;
+            }
+
+            .mafia-chat-input {
+                flex-direction: column;
+            }
+
+            .mafia-chat-input button {
+                width: 100%;
+            }
+        }
+
+        .player-card {
+            background-color: #283593;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .player-card button {
+            width: 100%;
+            padding: 10px;
+            font-size: 1.5rem;
+            margin: 0;
+            background-color: #1a237e;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: default;
+        }
+
+        .title {
+            color: white;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+        }
+
+        #vote-button {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #64b5f6;
+            padding: 0.5rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #vote-button:hover {
+            background-color: #42a5f5;
+        }
+
+        #complete-button {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #64b5f6;
+            padding: 0.5rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #complete-button:hover {
+            background-color: #42a5f5;
+        }
+        .input-field {
+            margin-bottom: 1.5rem;
+        }
+
+        input {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 4px;
+            width: 200px;
+        }
+
+        button {
+            padding: 0.5rem 2rem;
+            font-size: 1rem;
+            background-color: #64b5f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #42a5f5;
+        }
+        #waiting-room {
+            display: none;
+        }
+
+        .player-list {
+            background-color: #3949ab;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            min-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .player-item {
+            color: white;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            background-color: #5c6bc0;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background-color: #9e9e9e;
+            cursor: not-allowed;
+        }
+
+        .start-button {
+            margin-top: 1rem;
+        }
+
+        .notification-area {
+            background-color: #3949ab;
+            color: white;
+            margin: 1rem auto;
+            border-radius: 4px;
+            width: 80%;
+            font-size: 1.25rem;
+            line-height: 1.5;
+            direction: rtl;
+        }
+
+        .role-display {
+            background-color: #283593;
+            padding: 1rem;
+            border-radius: 4px 4px 0 0;
+            border-bottom: 2px solid #1a237e;
+            min-height: 40px;
+        }
+
+        .game-messages {
+            padding: 1rem;
+            min-height: 40px;
+        }
+
+        .mafia-chat {
+            display: none;
+            background-color: #3949ab;
+            padding: 1rem;
+            margin: 1rem auto;
+            border-radius: 4px;
+            width: 80%;
+        }
+
+        .mafia-chat-messages {
+            background-color: #283593;
+            color: white;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+        }
+
+        .mafia-chat-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .mafia-chat-input input {
+            flex-grow: 1;
+        }
+
+        .mafia-chat-input button {
+            flex-shrink: 0;
+        }
+
+        #restart-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #64b5f6;
+            padding: 0.5rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            z-index: 1000;
+        }
+
+        #restart-button:hover {
+            background-color: #42a5f5;
+        }
+            background-color: #3949ab;
+            color: white;
+            padding: 1rem;
+            margin: 1rem auto;
+            border-radius: 4px;
+            width: 80%;
+            min-height: 80px;
+            text-align: right;
+            font-size: 1.25rem;
+            line-height: 1.5;
+            direction: rtl;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="join-screen">
+        <h1 class="title">
+            <i class="fas fa-users"></i>
+            Mafia Game
+        </h1>
+        <div class="input-field">
+            <input type="text" id="name-input" placeholder="Enter your name">
+        </div>
+        <button id="join-button">Join</button>
+    </div>
+
+    <div class="container" id="waiting-room">
+        <h1 class="title">
+            <i class="fas fa-clock"></i>
+            Waiting Room
+        </h1>
+        <div class="player-list" id="player-list">
+            <!-- Players will be added here dynamically -->
+        </div>
+        <button id="start-button" class="start-button" disabled>Start Game</button>
+    </div>
+
+    <div class="container" id="game-view">
+        <h1 class="title">
+            <i class="fas fa-gamepad"></i>
+            <span id="game-title">Mafia Game</span>
+            <button id="vote-button">Vote</button>
+            <button id="complete-button">Complete</button>
+        </h1>
+        <button id="show-results-button" style="display: none; margin: 10px auto;">Show Results</button>
+        <div class="notification-area">
+            <div class="role-display" id="role-display"></div>
+            <div class="game-messages" id="game-notifications">
+                Welcome to the game!
+            </div>
+        </div>
+        <div class="players-grid" id="game-players-grid">
+            <!-- Players will be added here in a grid layout -->
+        </div>
+        <button id="restart-button">Restart</button>
+    </div>
+
+    <script>
+        const socket = io();
+        const joinScreen = document.getElementById('join-screen');
+        const waitingRoom = document.getElementById('waiting-room');
+        const nameInput = document.getElementById('name-input');
+        const joinButton = document.getElementById('join-button');
+        const playerList = document.getElementById('player-list');
+
+        joinButton.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (name) {
+                socket.emit('join', name);
+                joinScreen.style.display = 'none';
+                waitingRoom.style.display = 'block';
+            }
+        });
+
+        nameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinButton.click();
+            }
+        });
+
+        socket.on('updatePlayers', (data) => {
+            const players = data.players;
+            playerList.innerHTML = players
+                .map(player => `<div class="player-item">${player}</div>`)
+                .join('');
+            
+            const startButton = document.getElementById('start-button');
+            startButton.style.display = data.firstPlayer === nameInput.value ? 'block' : 'none';
+            startButton.disabled = players.length < 6 || players.length > 30;
+        });
+
+        document.getElementById('start-button').addEventListener('click', () => {
+            socket.emit('startGame');
+        });
+
+        let isVotingPhase = false;
+
+        document.getElementById('vote-button').addEventListener('click', () => {
+            socket.emit('toggleVoting');
+        });
+
+        // Add this to the JavaScript section, before the existing socket.on('votingPhaseChanged') handler
+        const gameTitle = document.getElementById('game-title');
+        const showResultsButton = document.getElementById('show-results-button');
+
+        // Update the socket.on('votingPhaseChanged') handler
+        socket.on('votingPhaseChanged', (votingEnabled) => {
+            isVotingPhase = votingEnabled;
+            const playerButtons = document.querySelectorAll('.player-button');
+            
+            // Update title and show/hide results button based on voting phase
+            gameTitle.textContent = votingEnabled ? 'Vote' : 'Mafia Game';
+            showResultsButton.style.display = votingEnabled ? 'block' : 'none';
+            
+            if (isVotingPhase) {
+                // Enable voting for active players
+                playerButtons.forEach(button => {
+                    if (button.style.backgroundColor !== '#9e9e9e') {
+                        button.style.pointerEvents = 'auto';
+                        button.style.cursor = 'pointer';
+                    }
+                });
+            } else {
+                // Disable voting
+                playerButtons.forEach(button => {
+                    if (!killedPlayers.has(button.dataset.player)) {
+                        button.style.backgroundColor = '#1a237e';
+                    }
+                    button.style.pointerEvents = 'none';
+                    button.style.cursor = 'default';
+                    button.classList.remove('voted');
+                });
+            }
+        });
+
+        // Add event listener for Show Results button
+        showResultsButton.addEventListener('click', () => {
+            const playerButtons = document.querySelectorAll('.player-button');
+            let voteCount = new Map();
+            
+            // Count purple votes for each player
+            playerButtons.forEach(button => {
+                if (button.style.backgroundColor === 'rgb(156, 39, 176)') { // Purple color
+                    const player = button.dataset.player;
+                    voteCount.set(player, (voteCount.get(player) || 0) + 1);
+                }
+            });
+            
+            // Find player with most votes
+            let maxVotes = 0;
+            let eliminatedPlayer = null;
+            
+            voteCount.forEach((votes, player) => {
+                if (votes > maxVotes) {
+                    maxVotes = votes;
+                    eliminatedPlayer = player;
+                }
+            });
+            
+            if (eliminatedPlayer) {
+                // Emit showResults event to server with voting results
+                socket.emit('showResults', {
+                    eliminatedPlayer: eliminatedPlayer,
+                    voteCount: Array.from(voteCount)
+                });
+            }
+        });
+
+        // Handle voting results from server
+        socket.on('votingResults', (data) => {
+            const { eliminatedPlayer } = data;
+            const playerButtons = document.querySelectorAll('.player-button');
+            
+            // Display elimination message in Arabic
+            const gameNotifications = document.getElementById('game-notifications');
+            gameNotifications.textContent = `تم اقصاء ${eliminatedPlayer}`;
+            
+            // Turn eliminated player's button gray and make it unclickable
+            const eliminatedButton = document.querySelector(`[data-player="${eliminatedPlayer}"]`);
+            if (eliminatedButton) {
+                eliminatedButton.style.backgroundColor = '#9e9e9e';
+                eliminatedButton.style.pointerEvents = 'none';
+                eliminatedButton.style.cursor = 'not-allowed';
+                killedPlayers.add(eliminatedPlayer);
+            }
+            
+            // Reset all other buttons to default state
+            playerButtons.forEach(button => {
+                if (!killedPlayers.has(button.dataset.player)) {
+                    button.style.backgroundColor = '#1a237e';
+                    button.style.pointerEvents = 'none';
+                    button.style.cursor = 'default';
+                    button.classList.remove('voted');
+                }
+            });
+            
+            // Hide Show Results button after displaying results
+            showResultsButton.style.display = 'none';
+        });
+
+        socket.on('gameStarted', (players) => {
+            waitingRoom.style.display = 'none';
+            document.getElementById('game-view').style.display = 'block';
+            
+            const gamePlayersGrid = document.getElementById('game-players-grid');
+            const gameNotifications = document.getElementById('game-notifications');
+            
+            gamePlayersGrid.innerHTML = players
+                .map(player => `
+                    <div class="player-card">
+                        <button class="player-button" data-player="${player}">${player}</button>
+                    </div>
+                `).join('');
+            
+            // Clear notifications area to prepare for role assignment
+            gameNotifications.textContent = '';
+
+            // Add click event listeners to player buttons
+            const playerButtons = document.querySelectorAll('.player-button');
+            playerButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    if (isVotingPhase && !killedPlayers.has(button.dataset.player)) {
+                        // Handle voting
+                        playerButtons.forEach(btn => {
+                            if (!killedPlayers.has(btn.dataset.player)) {
+                                btn.style.backgroundColor = '#1a237e';
+                                btn.classList.remove('voted');
+                            }
+                        });
+                        button.style.backgroundColor = '#9c27b0'; // Purple color
+                        button.classList.add('voted');
+                        socket.emit('playerVote', button.dataset.player);
+                    } else if (playerRole === 'انت هو المافيا' && !button.classList.contains('voted')) {
+                        socket.emit('mafiaVote', button.dataset.player);
+                    } else if (playerRole === 'انت هو الطبيب' && !button.classList.contains('doctor-selected')) {
+                        socket.emit('doctorSelect', button.dataset.player);
+                        // Only change color for the Doctor
+                        button.style.backgroundColor = '#4CAF50';
+                        button.classList.add('doctor-selected');
+                        // Disable further selections
+                        playerButtons.forEach(btn => {
+                            if (!btn.classList.contains('doctor-selected')) {
+                                btn.style.pointerEvents = 'none';
+                            }
+                        });
+                    } else if (playerRole === 'انت هو المحقق' && !button.classList.contains('detective-selected')) {
+                        socket.emit('detectiveSelect', button.dataset.player);
+                        // Only change color for the Detective
+                        button.style.backgroundColor = '#FFEB3B';
+                        button.classList.add('detective-selected');
+                        // Disable further selections
+                        playerButtons.forEach(btn => {
+                            if (!btn.classList.contains('detective-selected')) {
+                                btn.style.pointerEvents = 'none';
+                            }
+                        });
+                    }
+                });
+            });
+
+        });
+
+        let mafiaChat = null;
+        let mafiaMessages = null;
+        let playerRole = null;
+
+        socket.on('roleAssigned', (role) => {
+            playerRole = role;
+            const roleDisplay = document.getElementById('role-display');
+            roleDisplay.textContent = role;
+
+            // Show chat for Mafia players
+            if (role === 'انت هو المافيا' && !mafiaChat) {
+                mafiaChat = document.createElement('div');
+                mafiaChat.className = 'mafia-chat';
+                mafiaChat.style.display = 'block';
+                mafiaChat.innerHTML = `
+                    <div class="mafia-chat-messages"></div>
+                    <div class="mafia-chat-input">
+                        <input type="text" placeholder="Type your message...">
+                        <button>Send</button>
+                    </div>
+                `;
+                document.getElementById('game-view').appendChild(mafiaChat);
+
+                const input = mafiaChat.querySelector('input');
+                const sendButton = mafiaChat.querySelector('button');
+                mafiaMessages = mafiaChat.querySelector('.mafia-chat-messages');
+
+                const sendMessage = () => {
+                    const message = input.value.trim();
+                    if (message) {
+                        socket.emit('mafiaMessage', message);
+                        input.value = '';
+                    }
+                };
+
+                sendButton.addEventListener('click', sendMessage);
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        sendMessage();
+                    }
+                });
+            }
+        });
+
+        socket.on('mafiaMessage', (data) => {
+            if (mafiaMessages) {
+                const messageDiv = document.createElement('div');
+                messageDiv.textContent = `${data.sender}: ${data.message}`;
+                mafiaMessages.appendChild(messageDiv);
+                mafiaMessages.scrollTop = mafiaMessages.scrollHeight;
+            }
+        });
+
+        socket.on('mafiaVoteUpdate', (targetPlayer) => {
+            if (playerRole === 'انت هو المافيا') {
+                // Reset all buttons to default state
+                document.querySelectorAll('.player-button').forEach(button => {
+                    button.style.backgroundColor = '#1a237e';
+                    button.classList.remove('voted');
+                });
+
+                // Mark the voted player's button
+                const votedButton = document.querySelector(`[data-player="${targetPlayer}"]`);
+                if (votedButton) {
+                    votedButton.style.backgroundColor = '#ff0000';
+                    votedButton.classList.add('voted');
+                }
+            }
+        });
+
+        socket.on('detectiveResult', (result) => {
+            if (playerRole === 'انت هو المحقق') {
+                const gameNotifications = document.getElementById('game-notifications');
+                gameNotifications.textContent = result;
+            }
+        });
+
+        socket.on('nightResult', (data) => {
+            const gameNotifications = document.getElementById('game-notifications');
+            gameNotifications.textContent = data.message;
+            
+            // Make all buttons unclickable except Complete button
+            const playerButtons = document.querySelectorAll('.player-button');
+            playerButtons.forEach(button => {
+                button.style.pointerEvents = 'none';
+                // Reset any special colors (for Mafia, Doctor, Detective)
+                if (!data.message.includes('تم قتل ' + button.dataset.player)) {
+                    button.style.backgroundColor = '#1a237e';
+                }
+            });
+
+            // If a player was killed, turn their button gray
+            const killedPlayerMatch = data.message.match(/تم قتل (.+)/);
+            if (killedPlayerMatch) {
+                const killedPlayer = killedPlayerMatch[1];
+                const killedButton = document.querySelector(`[data-player="${killedPlayer}"]`);
+                if (killedButton) {
+                    killedButton.style.backgroundColor = '#9e9e9e';
+                }
+            }
+
+            // Keep Complete button clickable
+            document.getElementById('complete-button').style.pointerEvents = 'auto';
+        });
+
+        document.getElementById('complete-button').addEventListener('click', () => {
+            socket.emit('completeRound');
+        });
+
+        // Track killed players throughout the game
+        let killedPlayers = new Set();
+
+        socket.on('roundCompleted', () => {
+            const playerButtons = document.querySelectorAll('.player-button');
+            const gameNotifications = document.getElementById('game-notifications');
+            const killedPlayerMatch = gameNotifications.textContent.match(/تم قتل (.+)/);
+            
+            // Reset game title and hide show results button
+            gameTitle.textContent = 'Mafia Game';
+            showResultsButton.style.display = 'none';
+            
+            // Add newly killed player to the set
+            if (killedPlayerMatch) {
+                killedPlayers.add(killedPlayerMatch[1]);
+            }
+            
+            playerButtons.forEach(button => {
+                // Reset special role indicators
+                button.classList.remove('voted', 'doctor-selected', 'detective-selected');
+                
+                if (killedPlayers.has(button.dataset.player)) {
+                    // Keep all killed players' buttons gray and unclickable
+                    button.style.backgroundColor = '#9e9e9e';
+                    button.style.pointerEvents = 'none';
+                } else {
+                    // Reset other buttons to default state and make them clickable
+                    button.style.backgroundColor = '#1a237e';
+                    button.style.pointerEvents = 'auto';
+                }
+            });
+            
+            // Reset voting phase
+            isVotingPhase = false;
+        });
+
+        // Add event listener for restart button
+        document.getElementById('restart-button').addEventListener('click', () => {
+            socket.emit('restartGame');
+        });
+
+        // Handle game restart event
+        socket.on('gameRestarted', (players) => {
+            // Reset game state
+            killedPlayers.clear();
+            isVotingPhase = false;
+            playerRole = null;
+            gameTitle.textContent = 'Mafia Game';
+            showResultsButton.style.display = 'none';
+
+            // Clear notifications
+            const gameNotifications = document.getElementById('game-notifications');
+            gameNotifications.textContent = 'Game restarted!';
+            document.getElementById('role-display').textContent = '';
+
+            // Remove mafia chat if it exists
+            if (mafiaChat) {
+                mafiaChat.remove();
+                mafiaChat = null;
+                mafiaMessages = null;
+            }
+
+            // Reset all player buttons
+            const gamePlayersGrid = document.getElementById('game-players-grid');
+            gamePlayersGrid.innerHTML = players
+                .map(player => `
+                    <div class="player-card">
+                        <button class="player-button" data-player="${player}">${player}</button>
+                    </div>
+                `).join('');
+
+            // Reattach click event listeners to player buttons
+            const playerButtons = document.querySelectorAll('.player-button');
+            playerButtons.forEach(button => {
+                button.style.backgroundColor = '#1a237e';
+                button.style.pointerEvents = 'auto';
+                button.style.cursor = 'default';
+                button.classList.remove('voted', 'doctor-selected', 'detective-selected');
+
+                button.addEventListener('click', () => {
+                    if (isVotingPhase && !killedPlayers.has(button.dataset.player)) {
+                        // Handle voting
+                        playerButtons.forEach(btn => {
+                            if (!killedPlayers.has(btn.dataset.player)) {
+                                btn.style.backgroundColor = '#1a237e';
+                                btn.classList.remove('voted');
+                            }
+                        });
+                        button.style.backgroundColor = '#9c27b0';
+                        button.classList.add('voted');
+                        socket.emit('playerVote', button.dataset.player);
+                    } else if (playerRole === 'انت هو المافيا' && !button.classList.contains('voted')) {
+                        socket.emit('mafiaVote', button.dataset.player);
+                    } else if (playerRole === 'انت هو الطبيب' && !button.classList.contains('doctor-selected')) {
+                        socket.emit('doctorSelect', button.dataset.player);
+                        button.style.backgroundColor = '#4CAF50';
+                        button.classList.add('doctor-selected');
+                        playerButtons.forEach(btn => {
+                            if (!btn.classList.contains('doctor-selected')) {
+                                btn.style.pointerEvents = 'none';
+                            }
+                        });
+                    } else if (playerRole === 'انت هو المحقق' && !button.classList.contains('detective-selected')) {
+                        socket.emit('detectiveSelect', button.dataset.player);
+                        button.style.backgroundColor = '#FFEB3B';
+                        button.classList.add('detective-selected');
+                        playerButtons.forEach(btn => {
+                            if (!btn.classList.contains('detective-selected')) {
+                                btn.style.pointerEvents = 'none';
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
